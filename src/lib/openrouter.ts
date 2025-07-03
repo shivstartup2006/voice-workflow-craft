@@ -131,5 +131,5 @@ Example node types to use:
   }
 }
 
-// Default instance with API key
-export const openRouterService = new OpenRouterService('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');
+// Create instance - API key will be provided via ApiKeyManager
+export const createOpenRouterService = (apiKey: string) => new OpenRouterService(apiKey);

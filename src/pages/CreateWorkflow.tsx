@@ -3,15 +3,19 @@ import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
 import { EnhancedVoiceInput } from '@/components/EnhancedVoiceInput';
 import { WorkflowPreview } from '@/components/WorkflowPreview';
-import { WorkflowEditor } from '@/components/WorkflowEditor';
+import { EnhancedWorkflowEditor } from '@/components/EnhancedWorkflowEditor';
+import { AdvancedChatInterface } from '@/components/AdvancedChatInterface';
+import { ApiKeyManager } from '@/components/ApiKeyManager';
+import { DeployButton } from '@/components/DeployButton';
 import { ScrollReveal } from '@/components/ScrollReveal';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { openRouterService } from '@/lib/openrouter';
-import { n8nService } from '@/lib/n8n';
+import { createOpenRouterService } from '@/lib/openrouter';
+import { createN8nAPI, createWorkflowGenerator } from '@/lib/n8n';
+import { MessageSquare, Bot } from 'lucide-react';
 
 interface GeneratedWorkflow {
   id: string;
@@ -36,21 +40,44 @@ const CreateWorkflow: React.FC = () => {
   const [processingStage, setProcessingStage] = useState('');
   const [processingProgress, setProcessingProgress] = useState(0);
   const [n8nConnected, setN8nConnected] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [apiConfig, setApiConfig] = useState({
+    openRouterKey: '',
+    n8nUrl: 'http://localhost:5678',
+    n8nApiKey: ''
+  });
+  const [n8nService, setN8nService] = useState<any>(null);
+  const [openRouterService, setOpenRouterService] = useState<any>(null);
   const { toast } = useToast();
 
-  // Check n8n connection on component mount
+  // Update services when API config changes
   React.useEffect(() => {
-    checkN8nConnection();
-  }, []);
+    if (apiConfig.n8nApiKey && apiConfig.n8nUrl) {
+      const n8nAPI = createN8nAPI(apiConfig.n8nApiKey, apiConfig.n8nUrl + '/api/v1');
+      setN8nService(n8nAPI);
+      checkN8nConnection(n8nAPI);
+    }
 
-  const checkN8nConnection = async () => {
+    if (apiConfig.openRouterKey) {
+      const openRouterAPI = createOpenRouterService(apiConfig.openRouterKey);
+      setOpenRouterService(openRouterAPI);
+    }
+  }, [apiConfig]);
+
+  const checkN8nConnection = async (service?: any) => {
+    const serviceToUse = service || n8nService;
+    if (!serviceToUse) {
+      setN8nConnected(false);
+      return;
+    }
+
     try {
-      const connected = await n8nService.testConnection();
+      const connected = await serviceToUse.testConnection();
       setN8nConnected(connected);
       if (!connected) {
         toast({
           title: "⚠️ N8n Connection",
-          description: "Could not connect to n8n. Make sure it's running on localhost:5678",
+          description: "Could not connect to n8n. Check your configuration.",
           variant: "destructive",
         });
       }
@@ -61,6 +88,10 @@ const CreateWorkflow: React.FC = () => {
 
   // Enhanced AI processing with OpenRouter
   const processPrompt = async (prompt: string): Promise<GeneratedWorkflow> => {
+    if (!openRouterService) {
+      throw new Error('OpenRouter service not configured');
+    }
+
     setProcessingStage('🤖 AI is analyzing your request...');
     setProcessingProgress(20);
 
@@ -380,17 +411,33 @@ const CreateWorkflow: React.FC = () => {
                 ✨ Create Automation
               </h1>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                Transform your ideas into powerful automated workflows using voice commands or text prompts
+                Transform your ideas into powerful automated workflows using AI assistance
               </p>
             </div>
           </ScrollReveal>
 
-          {/* Connection Status */}
+          {/* Control Panel */}
           <ScrollReveal delay={100}>
-            <div className="flex justify-center">
+            <div className="flex flex-wrap justify-center gap-4">
+              <ApiKeyManager onConfigUpdate={setApiConfig} />
               <Badge variant={n8nConnected ? "default" : "destructive"} className="px-4 py-2">
                 {n8nConnected ? "🟢 N8n Connected" : "🔴 N8n Disconnected"}
               </Badge>
+              <Button
+                onClick={() => setIsChatOpen(true)}
+                className="gap-2"
+                disabled={!apiConfig.openRouterKey}
+              >
+                <MessageSquare size={16} />
+                AI Assistant
+              </Button>
+              <DeployButton 
+                workflow={workflow?.n8nJson} 
+                n8nConfig={apiConfig.n8nApiKey && apiConfig.n8nUrl ? {
+                  url: apiConfig.n8nUrl,
+                  apiKey: apiConfig.n8nApiKey
+                } : undefined}
+              />
             </div>
           </ScrollReveal>
 
@@ -464,10 +511,14 @@ const CreateWorkflow: React.FC = () => {
           {/* Workflow Preview or Editor */}
           <ScrollReveal delay={600}>
             {isEditing && workflow ? (
-              <WorkflowEditor
+              <EnhancedWorkflowEditor
                 workflow={workflow.n8nJson}
                 onSave={handleSaveWorkflow}
                 onCancel={handleCancelEdit}
+                n8nConfig={apiConfig.n8nApiKey && apiConfig.n8nUrl ? {
+                  url: apiConfig.n8nUrl,
+                  apiKey: apiConfig.n8nApiKey
+                } : undefined}
               />
             ) : (
               <WorkflowPreview 
@@ -511,6 +562,14 @@ const CreateWorkflow: React.FC = () => {
       </main>
       
       <Footer />
+
+      {/* Advanced Chat Interface */}
+      <AdvancedChatInterface
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        onWorkflowGenerate={handlePromptSubmit}
+        openRouterKey={apiConfig.openRouterKey}
+      />
     </div>
   );
 };

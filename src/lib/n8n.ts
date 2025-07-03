@@ -1,8 +1,7 @@
 // n8n API Integration for VeloKinetiq
 // This file handles all n8n API interactions
 
-const N8N_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiYjA0NzllMC0wMjIzLTQ3MTQtODZlMS1jNDRhOTAzY2I1ZTIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUxNTM4NTIyfQ.0I3WcwUlpM7eyhp067ZLzAZNMCkanBOOOBDbYEIjaM4';
-const N8N_BASE_URL = 'http://localhost:5678/api/v1'; // Updated to use localhost
+// N8N configuration will be provided via ApiKeyManager
 
 interface N8nWorkflow {
   id?: string;
@@ -25,10 +24,12 @@ interface N8nNode {
 
 export class N8nAPI {
   private headers: Record<string, string>;
+  private baseUrl: string;
 
-  constructor() {
+  constructor(apiKey: string, baseUrl: string = 'http://localhost:5678/api/v1') {
+    this.baseUrl = baseUrl;
     this.headers = {
-      'Authorization': `Bearer ${N8N_API_KEY}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     };
   }
@@ -36,7 +37,7 @@ export class N8nAPI {
   // Test connection to n8n
   async testConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/workflows?limit=1`, {
+      const response = await fetch(`${this.baseUrl}/workflows?limit=1`, {
         method: 'GET',
         headers: this.headers,
       });
@@ -74,7 +75,7 @@ export class N8nAPI {
   // Get execution details
   async getExecution(executionId: string): Promise<any> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/executions/${executionId}`, {
+      const response = await fetch(`${this.baseUrl}/executions/${executionId}`, {
         method: 'GET',
         headers: this.headers,
       });
@@ -87,7 +88,7 @@ export class N8nAPI {
   // Create a new workflow in n8n
   async createWorkflow(workflow: N8nWorkflow): Promise<N8nWorkflow> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/workflows`, {
+      const response = await fetch(`${this.baseUrl}/workflows`, {
         method: 'POST',
         headers: this.headers,
         body: JSON.stringify(workflow),
@@ -107,7 +108,7 @@ export class N8nAPI {
   // Get all workflows
   async getWorkflows(): Promise<N8nWorkflow[]> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/workflows`, {
+      const response = await fetch(`${this.baseUrl}/workflows`, {
         headers: this.headers,
       });
 
@@ -126,7 +127,7 @@ export class N8nAPI {
   // Get a specific workflow
   async getWorkflow(workflowId: string): Promise<N8nWorkflow> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/workflows/${workflowId}`, {
+      const response = await fetch(`${this.baseUrl}/workflows/${workflowId}`, {
         headers: this.headers,
       });
 
@@ -144,7 +145,7 @@ export class N8nAPI {
   // Update a workflow
   async updateWorkflow(workflowId: string, workflow: Partial<N8nWorkflow>): Promise<N8nWorkflow> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/workflows/${workflowId}`, {
+      const response = await fetch(`${this.baseUrl}/workflows/${workflowId}`, {
         method: 'PUT',
         headers: this.headers,
         body: JSON.stringify(workflow),
@@ -164,7 +165,7 @@ export class N8nAPI {
   // Delete a workflow
   async deleteWorkflow(workflowId: string): Promise<void> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/workflows/${workflowId}`, {
+      const response = await fetch(`${this.baseUrl}/workflows/${workflowId}`, {
         method: 'DELETE',
         headers: this.headers,
       });
@@ -181,7 +182,7 @@ export class N8nAPI {
   // Activate/Deactivate a workflow
   async toggleWorkflow(workflowId: string, active: boolean): Promise<N8nWorkflow> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/workflows/${workflowId}/${active ? 'activate' : 'deactivate'}`, {
+      const response = await fetch(`${this.baseUrl}/workflows/${workflowId}/${active ? 'activate' : 'deactivate'}`, {
         method: 'POST',
         headers: this.headers,
       });
@@ -200,7 +201,7 @@ export class N8nAPI {
   // Execute a workflow manually
   async executeWorkflow(workflowId: string, data?: Record<string, any>): Promise<any> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/workflows/${workflowId}/execute`, {
+      const response = await fetch(`${this.baseUrl}/workflows/${workflowId}/execute`, {
         method: 'POST',
         headers: this.headers,
         body: JSON.stringify({ data }),
@@ -220,7 +221,7 @@ export class N8nAPI {
   // Get workflow execution history
   async getExecutions(workflowId: string, limit: number = 20): Promise<any[]> {
     try {
-      const response = await fetch(`${N8N_BASE_URL}/executions?workflowId=${workflowId}&limit=${limit}`, {
+      const response = await fetch(`${this.baseUrl}/executions?workflowId=${workflowId}&limit=${limit}`, {
         headers: this.headers,
       });
 
@@ -241,8 +242,8 @@ export class N8nAPI {
 export class WorkflowGenerator {
   private n8nAPI: N8nAPI;
 
-  constructor() {
-    this.n8nAPI = new N8nAPI();
+  constructor(apiKey: string, baseUrl?: string) {
+    this.n8nAPI = new N8nAPI(apiKey, baseUrl);
   }
 
   // Generate n8n workflow from natural language prompt
@@ -406,7 +407,6 @@ export class WorkflowGenerator {
   }
 }
 
-// Export singleton instances
-export const n8nAPI = new N8nAPI();
-export const workflowGenerator = new WorkflowGenerator();
-export const n8nService = n8nAPI;
+// Export factory functions - instances will be created with proper configuration
+export const createN8nAPI = (apiKey: string, baseUrl?: string) => new N8nAPI(apiKey, baseUrl);
+export const createWorkflowGenerator = (apiKey: string, baseUrl?: string) => new WorkflowGenerator(apiKey, baseUrl);
