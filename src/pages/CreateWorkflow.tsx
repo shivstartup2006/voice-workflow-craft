@@ -20,8 +20,10 @@ interface GeneratedWorkflow {
     id: string;
     name: string;
     type: string;
+    typeVersion: number;
     emoji: string;
     position: [number, number];
+    parameters: Record<string, any>;
   }>;
   connections: any[];
   n8nJson: any;
@@ -141,21 +143,93 @@ const CreateWorkflow: React.FC = () => {
     
     if (prompt.toLowerCase().includes('typeform')) {
       baseNodes.push(
-        { id: '1', name: 'Typeform Trigger', type: 'trigger', emoji: '📝', position: [100, 100] },
-        { id: '2', name: 'WhatsApp Message', type: 'action', emoji: '💬', position: [300, 100] },
-        { id: '3', name: 'Add to Airtable', type: 'action', emoji: '📊', position: [500, 100] }
+        { 
+          id: '1', 
+          name: 'Typeform Trigger', 
+          type: 'n8n-nodes-base.typeformTrigger', 
+          typeVersion: 1,
+          emoji: '📝', 
+          position: [100, 100],
+          parameters: {}
+        },
+        { 
+          id: '2', 
+          name: 'WhatsApp Message', 
+          type: 'n8n-nodes-base.httpRequest', 
+          typeVersion: 1,
+          emoji: '💬', 
+          position: [300, 100],
+          parameters: {}
+        },
+        { 
+          id: '3', 
+          name: 'Add to Airtable', 
+          type: 'n8n-nodes-base.airtable', 
+          typeVersion: 1,
+          emoji: '📊', 
+          position: [500, 100],
+          parameters: {}
+        }
       );
     } else if (prompt.toLowerCase().includes('email')) {
       baseNodes.push(
-        { id: '1', name: 'Email Received', type: 'trigger', emoji: '📧', position: [100, 100] },
-        { id: '2', name: 'Process Content', type: 'action', emoji: '🔄', position: [300, 100] },
-        { id: '3', name: 'Send Response', type: 'action', emoji: '📤', position: [500, 100] }
+        { 
+          id: '1', 
+          name: 'Email Received', 
+          type: 'n8n-nodes-base.webhook', 
+          typeVersion: 1,
+          emoji: '📧', 
+          position: [100, 100],
+          parameters: {}
+        },
+        { 
+          id: '2', 
+          name: 'Process Content', 
+          type: 'n8n-nodes-base.function', 
+          typeVersion: 1,
+          emoji: '🔄', 
+          position: [300, 100],
+          parameters: {}
+        },
+        { 
+          id: '3', 
+          name: 'Send Response', 
+          type: 'n8n-nodes-base.gmail', 
+          typeVersion: 1,
+          emoji: '📤', 
+          position: [500, 100],
+          parameters: {}
+        }
       );
     } else {
       baseNodes.push(
-        { id: '1', name: 'Trigger Event', type: 'trigger', emoji: '🎯', position: [100, 100] },
-        { id: '2', name: 'Process Data', type: 'action', emoji: '⚙️', position: [300, 100] },
-        { id: '3', name: 'Execute Action', type: 'action', emoji: '🚀', position: [500, 100] }
+        { 
+          id: '1', 
+          name: 'Trigger Event', 
+          type: 'n8n-nodes-base.manualTrigger', 
+          typeVersion: 1,
+          emoji: '🎯', 
+          position: [100, 100],
+          parameters: {}
+        },
+        { 
+          id: '2', 
+          name: 'Process Data', 
+          type: 'n8n-nodes-base.function', 
+          typeVersion: 1,
+          emoji: '⚙️', 
+          position: [300, 100],
+          parameters: {}
+        },
+        { 
+          id: '3', 
+          name: 'Execute Action', 
+          type: 'n8n-nodes-base.httpRequest', 
+          typeVersion: 1,
+          emoji: '🚀', 
+          position: [500, 100],
+          parameters: {}
+        }
       );
     }
     

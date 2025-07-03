@@ -2,7 +2,7 @@
 // This file handles all n8n API interactions
 
 const N8N_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiYjA0NzllMC0wMjIzLTQ3MTQtODZlMS1jNDRhOTAzY2I1ZTIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUxNTM4NTIyfQ.0I3WcwUlpM7eyhp067ZLzAZNMCkanBOOOBDbYEIjaM4';
-const N8N_BASE_URL = 'https://your-n8n-instance.com/api/v1'; // Replace with your n8n instance URL
+const N8N_BASE_URL = 'http://localhost:5678/api/v1'; // Updated to use localhost
 
 interface N8nWorkflow {
   id?: string;
@@ -31,6 +31,57 @@ export class N8nAPI {
       'Authorization': `Bearer ${N8N_API_KEY}`,
       'Content-Type': 'application/json',
     };
+  }
+
+  // Test connection to n8n
+  async testConnection(): Promise<boolean> {
+    try {
+      const response = await fetch(`${N8N_BASE_URL}/workflows?limit=1`, {
+        method: 'GET',
+        headers: this.headers,
+      });
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Parse workflow from JSON string
+  async parseWorkflowFromJSON(jsonString: string): Promise<any> {
+    try {
+      let cleanJson = jsonString.trim();
+      if (cleanJson.startsWith('```json')) {
+        cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      }
+      const workflow = JSON.parse(cleanJson);
+      if (!workflow.name) {
+        workflow.name = `Generated Workflow ${Date.now()}`;
+      }
+      return workflow;
+    } catch (error) {
+      throw new Error('Invalid JSON format received from AI');
+    }
+  }
+
+  // Validate workflow structure
+  async validateWorkflow(workflow: any): Promise<{ valid: boolean; errors?: string[] }> {
+    if (!workflow.nodes || !Array.isArray(workflow.nodes)) {
+      return { valid: false, errors: ['Workflow must have nodes array'] };
+    }
+    return { valid: true };
+  }
+
+  // Get execution details
+  async getExecution(executionId: string): Promise<any> {
+    try {
+      const response = await fetch(`${N8N_BASE_URL}/executions/${executionId}`, {
+        method: 'GET',
+        headers: this.headers,
+      });
+      return await response.json();
+    } catch (error) {
+      throw error;
+    }
   }
 
   // Create a new workflow in n8n
