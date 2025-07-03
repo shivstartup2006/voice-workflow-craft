@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { Navigation } from '@/components/Navigation';
 import { Footer } from '@/components/Footer';
-import { VoiceInput } from '@/components/VoiceInput';
+import { EnhancedVoiceInput } from '@/components/EnhancedVoiceInput';
 import { WorkflowPreview } from '@/components/WorkflowPreview';
+import { WorkflowEditor } from '@/components/WorkflowEditor';
 import { ScrollReveal } from '@/components/ScrollReveal';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { openRouterService } from '@/lib/openrouter';
+import { n8nService } from '@/lib/n8n';
 
 interface GeneratedWorkflow {
   id: string;
@@ -25,23 +30,99 @@ interface GeneratedWorkflow {
 const CreateWorkflow: React.FC = () => {
   const [workflow, setWorkflow] = useState<GeneratedWorkflow | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [processingStage, setProcessingStage] = useState('');
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [n8nConnected, setN8nConnected] = useState(false);
   const { toast } = useToast();
 
-  // Mock AI processing - in real app, this would call your AI API
-  const processPrompt = async (prompt: string): Promise<GeneratedWorkflow> => {
-    // Simulate AI processing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+  // Check n8n connection on component mount
+  React.useEffect(() => {
+    checkN8nConnection();
+  }, []);
 
-    // Mock workflow generation based on prompt
-    const mockWorkflow: GeneratedWorkflow = {
+  const checkN8nConnection = async () => {
+    try {
+      const connected = await n8nService.testConnection();
+      setN8nConnected(connected);
+      if (!connected) {
+        toast({
+          title: "⚠️ N8n Connection",
+          description: "Could not connect to n8n. Make sure it's running on localhost:5678",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      setN8nConnected(false);
+    }
+  };
+
+  // Enhanced AI processing with OpenRouter
+  const processPrompt = async (prompt: string): Promise<GeneratedWorkflow> => {
+    setProcessingStage('🤖 AI is analyzing your request...');
+    setProcessingProgress(20);
+
+    try {
+      // Generate workflow with OpenRouter AI
+      const aiResponse = await openRouterService.generateWorkflow(prompt);
+      
+      setProcessingStage('🔧 Parsing workflow structure...');
+      setProcessingProgress(50);
+
+      // Parse the AI response
+      const n8nWorkflow = await n8nService.parseWorkflowFromJSON(aiResponse);
+      
+      setProcessingStage('✅ Validating workflow...');
+      setProcessingProgress(80);
+
+      // Validate the workflow
+      const validation = await n8nService.validateWorkflow(n8nWorkflow);
+      if (!validation.valid) {
+        throw new Error(`Workflow validation failed: ${validation.errors?.join(', ')}`);
+      }
+
+      setProcessingStage('🎉 Workflow ready!');
+      setProcessingProgress(100);
+
+      const generatedWorkflow: GeneratedWorkflow = {
+        id: `workflow_${Date.now()}`,
+        name: n8nWorkflow.name || extractWorkflowName(prompt),
+        nodes: n8nWorkflow.nodes || [],
+        connections: n8nWorkflow.connections || {},
+        n8nJson: n8nWorkflow
+      };
+
+      // If n8n is connected, optionally create the workflow there
+      if (n8nConnected) {
+        try {
+          const createdWorkflow = await n8nService.createWorkflow({
+            name: generatedWorkflow.name,
+            active: false,
+            nodes: generatedWorkflow.nodes,
+            connections: generatedWorkflow.connections
+          });
+          generatedWorkflow.id = createdWorkflow.id || generatedWorkflow.id;
+        } catch (error) {
+          console.warn('Failed to create workflow in n8n:', error);
+        }
+      }
+
+      return generatedWorkflow;
+    } catch (error) {
+      console.error('Workflow generation failed:', error);
+      // Fallback to mock workflow if AI fails
+      return generateFallbackWorkflow(prompt);
+    }
+  };
+
+  const generateFallbackWorkflow = (prompt: string): GeneratedWorkflow => {
+    return {
       id: `workflow_${Date.now()}`,
       name: extractWorkflowName(prompt),
       nodes: generateMockNodes(prompt),
       connections: [],
       n8nJson: generateMockN8nJson(prompt)
     };
-
-    return mockWorkflow;
   };
 
   const extractWorkflowName = (prompt: string): string => {
@@ -98,6 +179,8 @@ const CreateWorkflow: React.FC = () => {
 
   const handlePromptSubmit = async (prompt: string) => {
     setIsProcessing(true);
+    setProcessingProgress(0);
+    setProcessingStage('🚀 Starting workflow generation...');
     
     try {
       const generatedWorkflow = await processPrompt(prompt);
@@ -105,9 +188,10 @@ const CreateWorkflow: React.FC = () => {
       
       toast({
         title: "🎉 Workflow Generated!",
-        description: "Your automation workflow has been created successfully.",
+        description: `Your automation workflow "${generatedWorkflow.name}" has been created successfully.`,
       });
     } catch (error) {
+      console.error('Workflow generation error:', error);
       toast({
         title: "❌ Generation Failed",
         description: "Failed to generate workflow. Please try again.",
@@ -115,21 +199,91 @@ const CreateWorkflow: React.FC = () => {
       });
     } finally {
       setIsProcessing(false);
+      setProcessingProgress(0);
+      setProcessingStage('');
     }
   };
 
   const handleEdit = () => {
-    toast({
-      title: "✏️ Editor Coming Soon",
-      description: "Visual workflow editor will be available soon!",
-    });
+    setIsEditing(true);
   };
 
-  const handleRun = () => {
-    toast({
-      title: "🧪 Test Run Started",
-      description: "Your workflow is being tested...",
-    });
+  const handleSaveWorkflow = async (editedWorkflow: any) => {
+    try {
+      if (n8nConnected && workflow?.id) {
+        await n8nService.updateWorkflow(workflow.id, editedWorkflow);
+        toast({
+          title: "✅ Workflow Updated",
+          description: "Your workflow has been updated in n8n successfully.",
+        });
+      }
+      
+      setWorkflow({
+        ...workflow!,
+        ...editedWorkflow,
+        n8nJson: editedWorkflow
+      });
+      setIsEditing(false);
+    } catch (error) {
+      toast({
+        title: "❌ Update Failed",
+        description: "Failed to update workflow. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+
+  const handleRun = async () => {
+    if (!workflow?.id || !n8nConnected) {
+      toast({
+        title: "⚠️ Cannot Run Workflow",
+        description: "Make sure n8n is connected and workflow is saved.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      toast({
+        title: "🧪 Test Run Started",
+        description: "Your workflow is being executed...",
+      });
+
+      const execution = await n8nService.executeWorkflow(workflow.id);
+      
+      // Poll for execution result
+      setTimeout(async () => {
+        try {
+          const result = await n8nService.getExecution(execution.id);
+          
+          if (result.status === 'success') {
+            toast({
+              title: "✅ Workflow Executed Successfully",
+              description: "Your automation ran without errors.",
+            });
+          } else if (result.status === 'failed') {
+            toast({
+              title: "❌ Workflow Execution Failed",
+              description: "Check the n8n logs for more details.",
+              variant: "destructive",
+            });
+          }
+        } catch (error) {
+          console.error('Failed to get execution result:', error);
+        }
+      }, 3000);
+
+    } catch (error) {
+      toast({
+        title: "❌ Execution Failed",
+        description: "Failed to run workflow. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSave = () => {
@@ -157,13 +311,38 @@ const CreateWorkflow: React.FC = () => {
             </div>
           </ScrollReveal>
 
+          {/* Connection Status */}
+          <ScrollReveal delay={100}>
+            <div className="flex justify-center">
+              <Badge variant={n8nConnected ? "default" : "destructive"} className="px-4 py-2">
+                {n8nConnected ? "🟢 N8n Connected" : "🔴 N8n Disconnected"}
+              </Badge>
+            </div>
+          </ScrollReveal>
+
           {/* Voice Input Section */}
           <ScrollReveal delay={200}>
-            <VoiceInput 
+            <EnhancedVoiceInput 
               onPromptSubmit={handlePromptSubmit}
               isProcessing={isProcessing}
             />
           </ScrollReveal>
+
+          {/* Processing Status */}
+          {isProcessing && (
+            <ScrollReveal delay={300}>
+              <Card className="glass-card p-6 text-center">
+                <div className="space-y-4">
+                  <div className="text-2xl">{processingStage.split(' ')[0]}</div>
+                  <h3 className="font-semibold">{processingStage}</h3>
+                  <Progress value={processingProgress} className="w-full max-w-md mx-auto" />
+                  <p className="text-sm text-muted-foreground">
+                    AI is creating your workflow... This may take a few moments.
+                  </p>
+                </div>
+              </Card>
+            </ScrollReveal>
+          )}
 
           {/* Example Prompts */}
           <ScrollReveal delay={400}>
@@ -208,14 +387,22 @@ const CreateWorkflow: React.FC = () => {
             </Card>
           </ScrollReveal>
 
-          {/* Workflow Preview */}
+          {/* Workflow Preview or Editor */}
           <ScrollReveal delay={600}>
-            <WorkflowPreview 
-              workflow={workflow}
-              onEdit={handleEdit}
-              onRun={handleRun}
-              onSave={handleSave}
-            />
+            {isEditing && workflow ? (
+              <WorkflowEditor
+                workflow={workflow.n8nJson}
+                onSave={handleSaveWorkflow}
+                onCancel={handleCancelEdit}
+              />
+            ) : (
+              <WorkflowPreview 
+                workflow={workflow}
+                onEdit={handleEdit}
+                onRun={handleRun}
+                onSave={handleSave}
+              />
+            )}
           </ScrollReveal>
 
           {/* Features */}

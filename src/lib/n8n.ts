@@ -358,3 +358,4 @@ export class WorkflowGenerator {
 // Export singleton instances
 export const n8nAPI = new N8nAPI();
 export const workflowGenerator = new WorkflowGenerator();
+export const n8nService = n8nAPI;
